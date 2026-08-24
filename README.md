@@ -18,6 +18,8 @@
 
 **【辅助功能】** 编码解码、加密解密、CS上线、反弹shell、杀软查询、提权辅助、常用命令、字典生成、JAVA编码、资产分拣、Hots碰撞、40xBypass、Jwt破解、Ip归属地查询等。
 
+**【B站视频教程】[无影TscanPlus使用教程]( https://space.bilibili.com/355939370)** 
+
 https://github.com/TideSec/TscanPlus/assets/46297163/0f8cff21-6c33-4da3-bb6d-5f33d032a23e
 
 <video controls="controls" loop="loop" autoplay="autoplay"> 
