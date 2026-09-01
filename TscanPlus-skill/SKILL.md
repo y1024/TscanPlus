@@ -3,8 +3,8 @@ name: tscanplus
 description: >-
   Operates TscanPlus security scanner via MCP tools or CLI for authorized targets only.
   Use when the user mentions TscanPlus, port/URL/POC/subdomain scanning, MCP integration,
-  ip_scan, tscan_scan, ak_verify, cloud AK leak credential check, or recon on IPs, domains,
-  or URLs in any AI assistant with MCP support.
+  ip_scan, tscan_scan, ak_verify, jwt_decode, jwt_crack, OSS bucket (anonymous/endpoint/oss_path), cloud AK leak
+  credential check, or recon on IPs, domains, or URLs in any AI assistant with MCP support.
 ---
 
 # TscanPlus 扫描助手
@@ -21,6 +21,16 @@ description: >-
 - 资产过多时不要一次开启全部模块，以免耗时过久或占满 CPU。
 - 扫描前用一句话复述：目标、模块、是否含 POC/爆破。
 
+## 单任务与多目标（强制）
+
+无影 MCP 扫描为 **单项目单任务**：
+
+- **支持**：一次工具调用传入多个 URL / IP / 域名（逗号或换行），在同一任务内检测。
+- **不支持**：并行多次 `tools/call`（同时跑多个 `dir_scan` / `url_scan` / `ip_scan` 等）。
+- 多个站点优先 **合并进一次调用**，不要拆成并行任务。
+- 若其他扫描仍在执行：先等待一段时间再调用。扫描类工具共用闸门，后到的调用最多等 **15 秒**；超时返回错误，文案含 **「请合并 URL 或等当前任务结束」**。此时不要立刻再并行重试，应合并目标或等当前任务结束后再调。
+- 不受闸门限制：`jwt_decode` / `jwt_crack` / `ak_verify`。
+
 ## 产品能力概览
 
 TscanPlus / CLI 集成八大安全检测模块：
@@ -30,12 +40,13 @@ TscanPlus / CLI 集成八大安全检测模块：
 | 端口扫描 | `port` | `ip_scan` | IP/CIDR、存活探测、端口、可选服务指纹/POC/弱口令 |
 | Web 指纹 | `url` | `url_scan` | URL 指纹识别、Title、可选联动 POC |
 | POC 验证 | `poc` | `poc_scan` | xray 1.0 格式 POC，可按指纹或全量 |
-| 弱口令 | `crack` | `pwd_crack` | 多协议爆破，`targets` 为 `host:port` |
+| 弱口令 | `crack` | `pwd_crack` | 多协议爆破（多对多 / 一账一密），`targets` 为 `host:port` |
 | 目录枚举 | `dir` | `dir_scan` | 路径爆破，可自定义字典 |
 | JS 敏感信息 | `js` | `js_scan` | JS 文件中密钥、接口等 |
 | 子域名 | `domain` | `subdomain_scan` | 字典 + 可选 API（key 在 config.yaml） |
 | 空间测绘 | `cyber` | `cyber_search` | Hunter/FOFA 等（引擎在 config.yaml） |
-| AK 泄露验证 | —（GUI AK管理） | `ak_verify` | OSS/云主机/微信/钉钉/飞书/地图/海康萤石/听云/百度人脸/绿盟 凭据 API 验证 |
+| AK 泄露验证 | —（GUI AK管理） | `ak_verify` | OSS（含匿名桶 / 自定义 Endpoint）/云主机/微信/钉钉/飞书/地图/海康萤石/听云/百度人脸/绿盟 凭据 API 验证 |
+| JWT 解码/爆破 | `jwt decode` / `jwt crack` | `jwt_decode` / `jwt_crack` | 对齐 GUI JwtCrack；默认字典 `config/jwt.txt` |
 
 **多模块联动**使用 `tscan_scan`，`modules` 对应 `-m`，流程与 GUI 项目管理一致：
 
@@ -56,14 +67,16 @@ TscanPlus / CLI 集成八大安全检测模块：
 |----------|----------|------|
 | 单 IP/CIDR 看端口 | `ip_scan` | `target` 必填；先小范围 `ports` |
 | 多目标只扫端口+弱口令+POC | `ip_scan` 或 `tscan_scan` | `ip_scan` 用 `pwd_check`/`poc_check` |
-| 一批 URL 指纹/Web | `url_scan` | `targets` 逗号分隔 |
-| 已知 URL 打 POC | `poc_scan` | 慎用 `poc_full` |
+| 一批 URL 指纹/Web | `url_scan` | `targets` 逗号分隔，**一次调用多个 URL** |
+| 已知 URL 打 POC | `poc_scan` | `targets` 逗号分隔；慎用 `poc_full` |
 | 弱口令 | `pwd_crack` | `targets`: `192.168.1.1:22,192.168.1.1:3306` |
-| 目录 / JS | `dir_scan` / `js_scan` | 需完整 URL |
+| 目录 / JS | `dir_scan` / `js_scan` | 完整 URL，**多个 URL 一次传入**，勿并行多次调用 |
 | 子域名 | `subdomain_scan` | `domains`；API 需 config |
 | 空间测绘 | `cyber_search` | `query` 对齐 `-ck` |
 | 多阶段、结果传递 | `tscan_scan` | 大任务可分阶段执行 |
-| 云 AK 泄露验证 | `ak_verify` | `kind=oss/server/wechat/dingtalk/feishu/map/hikys/tingyun/baiduface/nsfocus` |
+| 云 AK 泄露验证 | `ak_verify` | `kind=oss/server/...`；OSS 支持匿名桶 URL、自定义 Endpoint、阿里云 `oss_path` |
+| JWT 解码 | `jwt_decode` | 解析 Header/Payload/Signature |
+| JWT 密钥爆破 | `jwt_crack` | 默认 `config/jwt.txt`，可自定义 `dict` 或内联 `secrets` |
 
 ## 通用参数（MCP / CLI）
 
@@ -144,11 +157,16 @@ POC 路径在 `config.yaml`（xray 1.0 格式），与 GUI 一致。
 |----------|-----|------|------|
 | `targets` | `-h` | 必填 | **`host:port`**，逗号分隔 |
 | `services` | `-s` | `all` | `ssh,mysql,rdp` 等 |
-| `user` | `-user` | 内置字典 | 逗号分隔多个 |
-| `pwd` | `-pwd` | 内置字典 | |
+| `user` | `-user` | 内置字典 | 多对多；逗号分隔多个 |
+| `pwd` | `-pwd` | 内置字典 | 多对多 |
+| `pair` | `-pair` | `false` | 启用一账一密（一对一） |
+| `pairf` | `-pairf` | — | 一对一字典文件，每行 `user:pass` |
+| `pair_dict` | — | — | 一对一内联字典（换行分隔 `user:pass`） |
 | `cmd` | `-c` | `whoami` | 成功后执行命令 |
 | `thread` | `-br` | `1` | 爆破线程 |
 | `timeout` | `-time` | `3` | |
+
+**字典模式：** 默认多对多（账号×密码笛卡尔积）。一账一密时只用 `user:pass` 配对尝试；指定 `pair`/`pairf`/`pair_dict`（或 CLI `-pair`/`-pairf`）即启用。与 `user`/`pwd` 同时出现时以一对一为准。
 
 ### 5. 子域名 `subdomain_scan`（`domain`）
 
@@ -164,7 +182,7 @@ POC 路径在 `config.yaml`（xray 1.0 格式），与 GUI 一致。
 
 | MCP 参数 | CLI | 默认 | 说明 |
 |----------|-----|------|------|
-| `urls` | `-u` | 必填 | 基 URL |
+| `urls` | `-u` | 必填 | 基 URL，**多个用逗号或换行分隔（一次调用）** |
 | `thread` | `-ds` | `20` | |
 | `dict` | `-dd` | 内置 10k | **绝对路径** |
 | `timeout` | `-time` | `3` | |
@@ -174,7 +192,7 @@ POC 路径在 `config.yaml`（xray 1.0 格式），与 GUI 一致。
 
 | MCP 参数 | CLI | 默认 | 说明 |
 |----------|-----|------|------|
-| `urls` | `-u` | 必填 | |
+| `urls` | `-u` | 必填 | **多个用逗号或换行分隔（一次调用）** |
 | `timeout` | `-time` / Web | `3` | |
 | `proxy` | `-proxy` | — | |
 
@@ -223,7 +241,7 @@ POC 路径在 `config.yaml`（xray 1.0 格式），与 GUI 一致。
 
 | `kind` | GUI Tab | 验证方式 |
 |--------|---------|----------|
-| `oss` | OSS存储管理 | 列存储桶 |
+| `oss` | OSS存储管理 | 列存储桶；匿名桶 URL 验活；自定义 Endpoint / 低权限 `oss_path` |
 | `server` | 云主机管理 | 列举实例 |
 | `wechat` | 微信利用 | 获取 AccessToken |
 | `dingtalk` | 钉钉利用 | 获取 AccessToken |
@@ -249,7 +267,7 @@ POC 路径在 `config.yaml`（xray 1.0 格式），与 GUI 一致。
 
 | `kind` | `access_key` | `secret_key` | 其他关键参数 |
 |--------|--------------|--------------|--------------|
-| `oss` | AccessKey | SecretKey | `provider` 必填；`session_token`/`ext_json`/`include_details` |
+| `oss` | AccessKey（匿名可不填） | SecretKey（匿名可不填） | 见下「OSS 扩展」 |
 | `server` | AccessKey | SecretKey | `provider` 必填；`session_token`/`include_details` |
 | `wechat` | AppID / CorpID | AppSecret / CorpSecret | `mode`: `oa`（默认）/`mini`/`work` |
 | `dingtalk` | AppKey | AppSecret | `mode`: `standard`（默认）/`exclusive`；专属需 `domain` |
@@ -265,7 +283,22 @@ POC 路径在 `config.yaml`（xray 1.0 格式），与 GUI 一致。
 | `kind` | `provider` |
 |--------|------------|
 | `oss` | `aliyun` `tencent` `huawei` `tianyi` `jdcloud` `ksyun` `aws` `minio` `baidu` `qiniu` `yidong` `liantong` `qingcloud` `upyun` |
-| `server` | `aliyun` `tencent` `jdcloud` `huawei` `aws` `ucloud` `baidu` `volcengine` |
+| `server` | `aliyun` `tencent` `jdcloud` `huawei` `aws` `ucloud` `baidu` `volcengine` `tianyi` |
+
+**OSS 扩展（对齐 GUI「OSS存储管理」）：**
+
+| 场景 | 参数 | 说明 |
+|------|------|------|
+| 长期密钥 | `provider` + `access_key` + `secret_key` | 列存储桶验活 |
+| STS 临时凭据 | 另加 `session_token`，`credential_type=sts` | |
+| 自定义 Endpoint | `endpoint` | **MinIO 必填**；阿里云及其他厂商可选，如 `oss-cn-hangzhou.aliyuncs.com` 或 `http://127.0.0.1:9000` |
+| 低权限无法列桶 | 阿里云 `oss_path` | `my-bucket` 或 `my-bucket/data/`（与 OSS Browser 路径一致） |
+| 匿名访问 | `credential_type=anonymous` + `bucket_url` | **无需密钥**，只验证公开桶能否列目录（只读）；`provider` 可省略，从 URL 识别 |
+| 又拍云 | `ext_json.buckets` | 服务名列表；ACCESS_KEY=操作员，SECRET_KEY=操作员密码 |
+
+也可把 `endpoint` / `ossPath` / `bucketUrl` / `region` / `buckets` 写入 `ext_json`。独立参数与 `ext_json` 同时出现时，独立参数覆盖同名字段。
+
+匿名 `bucket_url` 示例：`https://bucket.oss-cn-hangzhou.aliyuncs.com`、`http://127.0.0.1:9000/bucket`。
 
 **地图 `service`：** `amap_walking` `amap_geocode` `amap_mp_regeocode` `tianditu_staticimage` `tianditu_search` `tianditu_wmts` `baidu_web_search` `baidu_ios_search`
 
@@ -273,13 +306,47 @@ POC 路径在 `config.yaml`（xray 1.0 格式），与 GUI 一致。
 
 - `valid`：凭据是否可用
 - 多数模块：`token`（可关）、`body`、`error`
-- `oss`：`bucket_count`、可选 `buckets`
+- `oss`：`bucket_count`、可选 `buckets`；匿名时 `access_mode=anonymous`、`bucket_url`
 - `server`：`region_count`、`instance_count`、可选 `instances`
 - 凭据无效时仍返回 JSON（`success: true`，`valid: false`）；参数错误才是工具级错误
 
 **授权注意：** 仅验证用户明确授权范围内的凭据；不要在对话中完整回显 SecretKey / AppSecret。
 
-### 10. 综合扫描 `tscan_scan`
+### 10. JWT 解码与爆破 `jwt_decode` / `jwt_crack`（GUI「轻武器库 → JwtCrack」）
+
+对齐 GUI JwtCrack 的解码与 HMAC 密钥爆破。默认字典为配置目录下的 `jwt.txt`（即 `config/jwt.txt`）。
+
+#### `jwt_decode`
+
+| MCP 参数 | CLI | 默认 | 说明 |
+|----------|-----|------|------|
+| `token` | `-token` | 必填 | JWT 字符串 |
+
+响应 `data`：`alg`、`header`、`payload`（格式化 JSON）、`signature`（hex）。
+
+**CLI：** `TscanPlus jwt decode -token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+
+#### `jwt_crack`
+
+| MCP 参数 | CLI | 默认 | 说明 |
+|----------|-----|------|------|
+| `token` | `-token` | 必填 | JWT 字符串 |
+| `dict` | `-dict` | `config/jwt.txt` | 自定义字典**绝对路径** |
+| `secrets` | — | — | 内联密钥，换行或逗号分隔（指定时优先于 `dict`） |
+| `encoding` | `-enc` | `all` | `all` / `none` / `base64` / `md5` / `md5_16` |
+
+响应 `data`：`found`；成功时还有 `secret`、`secret_encoding`。未找到密钥仍返回 JSON（`success: true`，`found: false`）。
+
+**CLI：**
+
+```bash
+TscanPlus jwt crack -token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+TscanPlus jwt crack -token eyJ... -dict /path/to/wordlist.txt -enc all
+```
+
+仅对用户授权范围内的 Token 进行爆破。
+
+### 11. 综合扫描 `tscan_scan`
 
 在单模块参数基础上，常用额外字段：
 
@@ -294,7 +361,7 @@ POC 路径在 `config.yaml`（xray 1.0 格式），与 GUI 一致。
 | `thread` / `url_thread` / `poc_thread` / `dir_thread` | `-t` 等 | |
 | `finger` | `-finger` | |
 | `poc_full` / `poc_name` / `poc_level` | POC 相关 | |
-| `crack_*` | `-s/-user/-pwd/-c/-br` | 弱口令 |
+| `crack_*` | `-s/-user/-pwd/-pair/-pairf/-c/-br` | 弱口令（含一账一密；MCP 另有 `crack_pair_dict`） |
 | `sub_api` / `sub_dict` | 子域 | |
 | `dir_dict` | `-dd` | |
 
@@ -398,6 +465,7 @@ GUI：**AI 辅助 → MCP 服务配置** 可选择传输模式（Streamable HTTP
 2. **表格化列表**：`results.ipscan` / `urlscan` / `poccheck` / `pwdcrack` / `dirscan` / `jsfinder` / `subdomain` / `cyber` 关键字段。
 3. **`project_cleared: true`**：已清空默认 `MCP` 项目旧数据。
 4. `counts` > `result_limit`：说明仅返回前 N 条，全量在 `config.db` 或 GUI。
+5. 工具错误含 **「请合并 URL 或等当前任务结束」**：当前有扫描在跑。把多个目标合并进一次调用，或等待后再调（不要并行重试）。
 
 不要只回复「扫描完成」。
 
@@ -405,22 +473,27 @@ GUI：**AI 辅助 → MCP 服务配置** 可选择传输模式（Streamable HTTP
 
 ## 常见工作流
 
-1. **IP → Web → 漏洞：** `ip_scan`（常见 Web 端口）→ 拼 URL → `url_scan` → 用户确认 → `poc_scan`
+1. **IP → Web → 漏洞：** `ip_scan`（常见 Web 端口）→ 拼 URL → **一次** `url_scan`（多个 URL 逗号分隔）→ 用户确认 → `poc_scan`
 2. **子域 → 端口 → Web：** `subdomain_scan` → `tscan_scan`（`modules=port,url`）→ 按需 POC
-3. **测绘 → 扫描：** `cyber_search` → 提取 IP/URL → 用户确认 → `ip_scan` / `url_scan`
-4. **单项目持续：** 全程 `project=pentest-xx`，阶段结束用 `fresh_project=true` 重扫
-5. **AK 泄露验证：** 发现密钥 → `ak_verify`（按来源选 `kind`：云 AK 用 `oss`/`server`，微信钉钉飞书/地图/海康/听云/百度人脸/绿盟对应各自 kind）→ 汇报 `valid` 与摘要
+3. **测绘 → 扫描：** `cyber_search` → 提取 IP/URL → 用户确认 → `ip_scan` / `url_scan`（多目标一次传入）
+4. **单项目持续：** 全程 `project=pentest-xx`，阶段结束用 `fresh_project=true` 重扫；阶段之间串行，不要并行两个扫描工具
+5. **AK 泄露验证：** 发现密钥 → `ak_verify`（按来源选 `kind`：云 AK 用 `oss`/`server`，公开桶用 `kind=oss` + `credential_type=anonymous` + `bucket_url`，微信钉钉飞书/地图/海康/听云/百度人脸/绿盟对应各自 kind）→ 汇报 `valid` 与摘要
+6. **JWT：** 拿到 Token → `jwt_decode` 看 Header/Payload → 用户确认后 `jwt_crack`（默认 `config/jwt.txt`，或自定义 `dict`/`secrets`）
 
 ## 排错
 
 | 现象 | 处理 |
 |------|------|
 | 看不到 TscanPlus 工具 | 检查 MCP 配置、二进制绝对路径、重载 MCP |
-| 长时间无响应 | 同步阻塞扫描；缩小 `ports`/`targets`，先关 POC/爆破 |
+| 长时间无响应 | 同步阻塞扫描；缩小 `ports`/`targets`，先关 POC/爆破；多 URL 用一次调用而非并行 |
+| 卡在 `xxx open` | 升级版本；重启 `mcp serve` 或 GUI 内 MCP 服务 |
+| 报错「请合并 URL 或等当前任务结束」 | 无影不支持多任务并发。合并目标到一次调用，或等当前扫描结束（约 15 秒内若仍忙会直接报错）后再试 |
 | 卡在 `xxx open` | 升级版本；重启 `mcp serve` 或 GUI 内 MCP 服务 |
 | GUI 无 MCP 项目行 | 单工具可能不写 `project` 表；查库表或改用 `tscan_scan` |
 | 测绘/子域无结果 | 检查 `config.yaml` 中 API Key、Engines |
-| `ak_verify` 失败 / valid=false | 核对 `kind` 与字段映射；OSS/云主机要 `provider`；MinIO 要 `ext_json.endpoint`；钉钉专属要 `domain`；绿盟 UTS 要 `base_url`；海康 isecure 要 `host` |
+| `ak_verify` 失败 / valid=false | 核对 `kind` 与字段映射；OSS/云主机要 `provider`；MinIO 要 `endpoint`；阿里云低权限用 `oss_path`；匿名访问要 `bucket_url`；钉钉专属要 `domain`；绿盟 UTS 要 `base_url`；海康 isecure 要 `host` |
+| `jwt_decode` 失败 | Token 须为三段 `header.payload.signature` |
+| `jwt_crack` 未找到 / 字典不存在 | 默认字典在配置目录 `jwt.txt`；自定义 `dict` 须为绝对路径；或改用内联 `secrets` |
 | 结果与 GUI 不一致 | 共用同一 `config.yaml` / `config.db` |
 
 ## MCP 不可用时的 CLI
@@ -433,8 +506,12 @@ TscanPlus -m port -h 192.168.1.1 -p 80,443,3306 -t 600
 TscanPlus -m url,poc,dir,js -uf urls.txt -finger tiny
 TscanPlus -m domain,port,url,poc -d example.com -api
 TscanPlus -m crack -h 192.168.1.1 -p 22 -s ssh -user root -pwd 123456
+TscanPlus -m crack -h 192.168.1.1 -p 22 -s ssh -pair -pairf ./userpass.txt
 TscanPlus -m cyber,port,poc -ck 'domain="example.com"'
 TscanPlus -pr MyProject -m port,url,poc -h 192.168.1.1
+TscanPlus jwt decode -token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+TscanPlus jwt crack -token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+TscanPlus jwt crack -token eyJ... -dict /path/to/jwt.txt -enc all
 
 TscanPlus mcp stdio
 TscanPlus mcp serve -listen 127.0.0.1:8088

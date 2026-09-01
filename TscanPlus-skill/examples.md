@@ -2,7 +2,7 @@
 
 以下示例适用于任何能调用 TscanPlus MCP 工具的 AI 助手。参数语义对齐 **TscanClient** / **TscanPlus CLI**（`-m` 八大模块）。执行前须确认**授权**。
 
-**模块对照：** `port`→`ip_scan`，`url`→`url_scan`，`poc`→`poc_scan`，`crack`→`pwd_crack`，`dir`→`dir_scan`，`js`→`js_scan`，`domain`→`subdomain_scan`，`cyber`→`cyber_search`，多模块联动→`tscan_scan`，AK 泄露验证→`ak_verify`。
+**模块对照：** `port`→`ip_scan`，`url`→`url_scan`，`poc`→`poc_scan`，`crack`→`pwd_crack`，`dir`→`dir_scan`，`js`→`js_scan`，`domain`→`subdomain_scan`，`cyber`→`cyber_search`，多模块联动→`tscan_scan`，AK 泄露验证→`ak_verify`，JWT 解码/爆破→`jwt_decode`/`jwt_crack`。
 
 ---
 
@@ -254,6 +254,28 @@ timeout: 5
 
 ---
 
+### 示例 4-1b：一账一密（一对一）
+
+```yaml
+tool: pwd_crack
+targets: "192.168.1.1:22"
+services: ssh
+pair: true
+pair_dict: |
+  root:root
+  admin:admin123
+  ubuntu:ubuntu
+thread: 2
+```
+
+**CLI：** `TscanPlus -m crack -h 192.168.1.1 -p 22 -s ssh -pair -pairf /path/to/userpass.txt`
+
+`userpass.txt` 每行 `user:pass`。仅 `-pair` 时使用内置 pair 字典。
+
+**tscan_scan 等价参数：** `crack_pair` / `crack_pairf` / `crack_pair_dict`。
+
+---
+
 ### 示例 4-2：MySQL
 
 ```yaml
@@ -349,6 +371,17 @@ include_results: true
 
 ---
 
+### 示例 6-3：多 URL（推荐：一次调用，不要并行多次 dir_scan）
+
+```yaml
+tool: dir_scan
+urls: "http://a.test/admin,http://b.test/"
+thread: 20
+include_results: true
+```
+
+---
+
 ### 示例 6-2：自定义字典 + 高线程
 
 ```yaml
@@ -377,7 +410,7 @@ include_results: true
 
 ---
 
-### 示例 7-2：多 URL
+### 示例 7-2：多 URL（推荐：一次调用，不要并行多次 js_scan）
 
 ```yaml
 tool: js_scan
@@ -576,6 +609,8 @@ thread: "200"
 
 ## 十、项目管理
 
+无影为 **单项目单任务**：可在一次扫描里放多个 URL，不要并行开多个扫描任务。
+
 ### 示例 10-1：默认 MCP 项目（每次清空）
 
 未传 `project` 时自动使用 `MCP` 并在调用前清空，适合一次性对话扫描。
@@ -733,8 +768,37 @@ kind: "oss"
 provider: "minio"
 access_key: "minioadmin"
 secret_key: "minioadmin"
-ext_json: '{"endpoint":"http://10.0.0.8:9000"}'
+endpoint: "http://10.0.0.8:9000"
 ```
+
+也可写 `ext_json: '{"endpoint":"http://10.0.0.8:9000"}'`。
+
+### 示例 14-3b：OSS 匿名访问（无需密钥）
+
+**用户：** 这个桶 URL 能匿名列目录吗？
+
+```yaml
+tool: ak_verify
+kind: "oss"
+credential_type: "anonymous"
+bucket_url: "https://example-bucket.oss-cn-hangzhou.aliyuncs.com"
+```
+
+`provider` 可省略（从 URL 识别）。仅验证公开 ListBucket，只读。汇报 `data.valid`、`data.bucket`、`data.access_mode`。
+
+### 示例 14-3c：阿里云自定义 Endpoint / 低权限 oss_path
+
+```yaml
+tool: ak_verify
+kind: "oss"
+provider: "aliyun"
+access_key: "LTAI5txxxxxxxx"
+secret_key: "xxxxxxxx"
+endpoint: "oss-cn-hangzhou.aliyuncs.com"
+oss_path: "my-bucket/data/"
+```
+
+低权限账号无法 ListBuckets 时填 `oss_path`（桶名或 `桶名/前缀/`），工具会对该路径做列举以验活。
 
 ### 示例 14-4：STS 临时凭据
 
@@ -827,6 +891,8 @@ secret_key: "password"
     "kind": "oss",
     "provider": "aliyun",
     "valid": true,
+    "access_mode": "ak",
+    "credential_type": "longterm",
     "bucket_count": 3,
     "buckets": [
       {"name": "example-bucket", "region": "cn-hangzhou"}
@@ -837,7 +903,64 @@ secret_key: "password"
 
 ---
 
-## 十五、CLI 批量对照（无 MCP 时）
+## 十五、JWT 解码与爆破 `jwt_decode` / `jwt_crack`
+
+对齐 GUI「轻武器库 → JwtCrack」。默认爆破字典为配置目录 `jwt.txt`（`config/jwt.txt`）。
+
+### 示例 15-1：解码 JWT
+
+**用户：** 帮我解码这个 JWT。
+
+```yaml
+tool: jwt_decode
+token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJUc2NhblBsdXMifQ.xxx"
+```
+
+**汇报：** `data.alg`、`data.header`、`data.payload`。
+
+**CLI：** `TscanPlus jwt decode -token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+
+### 示例 15-2：默认字典爆破
+
+**用户：** 用默认字典爆破这个 JWT 的密钥。
+
+```yaml
+tool: jwt_crack
+token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJUc2NhblBsdXMifQ.xxx"
+encoding: "all"
+```
+
+**汇报：** `data.found`；成功则给 `data.secret` 与 `data.secret_encoding`。不要把完整 Token 反复刷屏。
+
+**CLI：** `TscanPlus jwt crack -token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...`
+
+### 示例 15-3：自定义字典
+
+**用户：** 用我的字典文件爆破。
+
+```yaml
+tool: jwt_crack
+token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.xxx.xxx"
+dict: "/abs/path/to/jwt.txt"
+encoding: "all"
+```
+
+**CLI：** `TscanPlus jwt crack -token eyJ... -dict /abs/path/to/jwt.txt`
+
+### 示例 15-4：内联少量密钥
+
+**用户：** 先试试这几个常见密钥。
+
+```yaml
+tool: jwt_crack
+token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.xxx.xxx"
+secrets: "secret\nsecret1\n123456\nadmin"
+encoding: "all"
+```
+
+---
+
+## 十六、CLI 批量对照（无 MCP 时）
 
 ```bash
 # C 段全面（慎用范围）
@@ -851,6 +974,8 @@ TscanPlus -h 192.168.1.0/24 -d example.com -m port,url,poc,crack,dir,js,domain,c
 
 # 指定项目
 TscanPlus -pr MyProject -m port,url,poc -h 192.168.1.1
+TscanPlus jwt decode -token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+TscanPlus jwt crack -token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 Agent 在 MCP 可用时应优先调用工具并解析 JSON，CLI 仅作备选说明。
